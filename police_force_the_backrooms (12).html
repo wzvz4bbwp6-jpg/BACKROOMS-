@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Police Force: The Backrooms</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght=0,400;0,700;1,400;1,700&display=swap');
+        
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            user-select: none;
+            font-family: 'Courier Prime', monospace;
+            background-color: #050500;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        #damage-vignette {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            box-shadow: inset 0 0 150px rgba(100, 80, 0, 0);
+            transition: box-shadow 0.1s ease-out;
+            z-index: 10;
+        }
+
+        /* Nişangah */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 20;
+            opacity: 0.5;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 200, 0.8);
+        }
+        #crosshair::before { top: 4px; left: -10px; width: 30px; height: 2px; }
+        #crosshair::after { top: -10px; left: 4px; width: 2px; height: 30px; }
+
+        /* CRT Ekran Efekti (VHS tarzı korku) */
+        .scanlines {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+            z-index: 30;
+            opacity: 0.7;
+        }
+
+        /* VHS Cızırtı Animasyonu */
+        @keyframes vhsGlitch {
+            0% { transform: translate(0, 0); }
+            20% { transform: translate(-2px, 1px); }
+            40% { transform: translate(2px, -1px); }
+            60% { transform: translate(-1px, 2px); }
+            80% { transform: translate(1px, -2px); }
+            100% { transform: translate(0, 0); }
+        }
+        .glitch-text {
+            animation: vhsGlitch 3s infinite;
+        }
+
+        /* Jumpscare Görsel Arayüzü */
+        #jumpscare-overlay {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, rgba(200,0,0,0.8) 0%, rgba(0,0,0,0.9) 100%);
+            z-index: 100;
+            mix-blend-mode: multiply;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.05s;
+        }
+        
+        #scary-face {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            width: 80%;
+            height: 80%;
+            max-width: 600px;
+            pointer-events: none;
+            z-index: 101;
+            opacity: 0;
+            transition: opacity 0.05s, transform 0.05s;
+        }
+
+        .jumpscare-active {
+            opacity: 1 !important;
+            animation: shake 0.2s infinite;
+        }
+
+        .face-active {
+            opacity: 1 !important;
+            transform: translate(-50%, -50%) scale(1.1) !important;
+            animation: shake 0.1s infinite;
+        }
+
+        @keyframes shake {
+            0% { transform: translate(calc(-50% + 5px), calc(-50% + 5px)) rotate(0deg); }
+            10% { transform: translate(calc(-50% - 5px), calc(-50% - 2px)) rotate(-1deg); }
+            20% { transform: translate(calc(-50% - 3px), calc(-50% + 0px)) rotate(1deg); }
+            30% { transform: translate(calc(-50% + 3px), calc(-50% + 2px)) rotate(0deg); }
+            40% { transform: translate(calc(-50% + 1px), calc(-50% - 1px)) rotate(1deg); }
+            50% { transform: translate(calc(-50% - 1px), calc(-50% + 2px)) rotate(-1deg); }
+            60% { transform: translate(calc(-50% - 3px), calc(-50% + 1px)) rotate(0deg); }
+            70% { transform: translate(calc(-50% + 3px), calc(-50% + 1px)) rotate(-1deg); }
+            80% { transform: translate(calc(-50% - 1px), calc(-50% - 1px)) rotate(1deg); }
+            90% { transform: translate(calc(-50% + 1px), calc(-50% + 2px)) rotate(0deg); }
+            100% { transform: translate(calc(-50% + 1px), calc(-50% - 2px)) rotate(-1deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Korkunç Jumpscare Sıfatı Overlay (SVG) -->
+    <div id="jumpscare-overlay"></div>
+    <div id="scary-face" class="flex items-center justify-center">
+        <!-- Özel Tasarlanmış Kabus Sıfatı (Yırtık Ağızlı, Kırmızı Boş Gözlü Smiler) -->
+        <svg viewBox="0 0 500 500" class="w-full h-full filter drop-shadow-[0_0_20px_rgba(255,0,0,0.8)]">
+            <g fill="none" stroke="red" stroke-width="8" stroke-linecap="round">
+                <!-- Kafatasımsı Distorte Şekil -->
+                <path d="M 150 100 Q 250 50 350 100 Q 420 200 380 350 Q 250 450 120 350 Q 80 200 150 100 Z" fill="black" stroke="none" />
+                <path d="M 150 100 Q 250 50 350 100 Q 420 200 380 350 Q 250 450 120 350 Q 80 200 150 100 Z" stroke="#330000" stroke-width="12"/>
+                
+                <!-- Boş Kırmızı Göz Delikleri -->
+                <ellipse cx="180" cy="180" rx="40" ry="55" fill="red" />
+                <ellipse cx="320" cy="180" rx="40" ry="55" fill="red" />
+                <!-- Parlayan Beyaz Göz Bebekleri -->
+                <circle cx="180" cy="180" r="8" fill="white" />
+                <circle cx="320" cy="180" r="8" fill="white" />
+                
+                <!-- Çarpık Kaşlar -->
+                <path d="M 130 130 Q 180 110 220 150" stroke="red" stroke-width="10"/>
+                <path d="M 370 130 Q 320 110 280 150" stroke="red" stroke-width="10"/>
+
+                <!-- Devasa Yırtık Ağız ve Sivri Dişler -->
+                <path d="M 100 280 Q 250 400 400 280 Q 250 300 100 280 Z" fill="#200000" stroke="red" stroke-width="12" />
+                
+                <!-- Dişler (Üst) -->
+                <polygon points="120,282 135,310 150,283" fill="white" stroke="red" stroke-width="2"/>
+                <polygon points="160,285 180,325 200,286" fill="white" stroke="red" stroke-width="2"/>
+                <polygon points="210,287 235,335 260,287" fill="white" stroke="red" stroke-width="2"/>
+                <polygon points="270,287 295,330 320,286" fill="white" stroke="red" stroke-width="2"/>
+                <polygon points="330,285 350,315 370,283" fill="white" stroke="red" stroke-width="2"/>
+                
+                <!-- Dişler (Alt) -->
+                <polygon points="140,315 155,295 170,319" fill="white" stroke="red" stroke-width="2"/>
+                <polygon points="190,325 210,300 230,332" fill="white" stroke="red" stroke-width="2"/>
+                <polygon points="250,335 270,302 290,332" fill="white" stroke="red" stroke-width="2"/>
+                <polygon points="310,322 325,300 340,316" fill="white" stroke="red" stroke-width="2"/>
+            </g>
+        </svg>
+    </div>
+
+    <div id="damage-vignette"></div>
+    <div class="scanlines"></div>
+    <div id="canvas-container"></div>
+    <div id="crosshair"></div>
+
+    <!-- Ana Menü -->
+    <div id="start-screen" class="absolute inset-0 bg-yellow-950 bg-opacity-95 flex flex-col justify-center items-center z-50 p-6 text-center text-yellow-100 border-8 border-yellow-900 m-4 rounded-lg">
+        <h1 class="text-5xl md:text-7xl font-bold text-yellow-600 mb-2 tracking-widest drop-shadow-md glitch-text">POLICE FORCE</h1>
+        <h2 class="text-xl md:text-2xl text-yellow-800 mb-8 font-bold tracking-wider">T H E   B A C K R O O M S</h2>
+        
+        <div class="max-w-xl bg-black p-6 rounded border border-yellow-800 text-left mb-8 space-y-3 text-sm md:text-base shadow-[0_0_30px_rgba(200,150,0,0.2)]">
+            <p class="text-yellow-600 font-bold text-center border-b border-yellow-800 pb-2 mb-4">MİSYON TALİMATI DEĞİŞTİ</p>
+            <p>• Suçluyu kovalarken yanlış bir kapıdan geçtin. Burası dünya değil.</p>
+            <p>• <span class="text-yellow-500 font-bold">[WASD]</span> ile hareket et, karanlığa dikkat et.</p>
+            <p>• <span class="text-yellow-500 font-bold">[SPACE]</span> Zıpla (Tavana dikkat et).</p>
+            <p>• <span class="text-yellow-500 font-bold">[SOL TIK]</span> Silahı kullan. (Mermiler onları sadece yavaşlatır).</p>
+            <p>• <span class="text-yellow-500 font-bold">[F]</span> "Polis!" diye bağır. <span class="text-red-500">AMA DİKKAT ET... SESİNE GELECEKLER.</span></p>
+            <p>• Karanlıktaki 'Varlıklar' teslim olmaz. Yaklaşırlarsa seni parçalarlar.</p>
+            <p class="text-yellow-800 italic mt-4 text-xs font-bold text-center">Nemli halı kokusu... ve sonsuz sarı duvarlar...</p>
+        </div>
+
+        <button id="btn-play" class="px-8 py-3 bg-yellow-800 hover:bg-yellow-700 active:scale-95 text-black font-bold text-lg rounded shadow-lg border-2 border-yellow-500 transition-all duration-150">
+            GERÇEKLİĞE VEDA ET
+        </button>
+    </div>
+
+    <!-- HUD Arayüzü -->
+    <div id="hud" class="absolute bottom-6 left-6 right-6 pointer-events-none z-20 flex justify-between items-end opacity-70">
+        <!-- Telsiz Durumu (Sol Alt) -->
+        <div class="bg-black border border-yellow-900 p-3 rounded text-yellow-600 flex items-center space-x-4">
+            <div class="flex flex-col">
+                <span class="text-xs font-bold">MERKEZ BAĞLANTISI</span>
+                <span id="badge-status" class="text-red-600 font-bold text-sm glitch-text">SİNYAL YOK</span>
+                <span id="score-text" class="text-xs text-yellow-800 mt-1">Hayatta Kalma Süresi: Başlıyor...</span>
+            </div>
+        </div>
+
+        <!-- Altyazı Uyarıları (Orta Alt) -->
+        <div id="interaction-prompt" class="absolute left-1/2 bottom-20 -translate-x-1/2 text-red-500 px-4 py-2 text-xl font-bold glitch-text hidden drop-shadow-[0_0_10px_red]">
+            BENİ DUYUYOR MU?...
+        </div>
+
+        <!-- Silah & Mermi (Sağ Alt) -->
+        <div class="bg-black border border-yellow-900 p-3 rounded text-yellow-600 text-right">
+            <span class="text-xs font-bold">BEYLİK TABANCASI</span>
+            <div class="text-2xl font-bold text-yellow-500" id="ammo-display">8 / 48</div>
+            <div class="text-xs text-yellow-800" id="reload-prompt">Yenilemek için [R]</div>
+        </div>
+    </div>
+
+    <!-- Kayıp Ekranı -->
+    <div id="game-over-screen" class="absolute inset-0 bg-black bg-opacity-95 flex flex-col justify-center items-center z-50 p-6 text-center text-stone-300 border-4 border-red-900 m-4 rounded-lg hidden">
+        <h1 class="text-5xl md:text-7xl font-bold text-red-700 mb-2 tracking-widest glitch-text">YAKALANDIN</h1>
+        <p class="text-yellow-700 mb-8 max-w-md">Artık sen de bu duvarların bir parçasısın.</p>
+        <button onclick="location.reload()" class="px-8 py-3 bg-red-900 hover:bg-red-800 text-black font-bold text-lg rounded shadow-lg border-2 border-red-700 transition-all">
+            UYANDIĞINI ZANNET
+        </button>
+    </div>
+
+    <!-- Zafer (Çıkış Yok) Ekranı -->
+    <div id="victory-screen" class="absolute inset-0 bg-black bg-opacity-95 flex flex-col justify-center items-center z-50 p-6 text-center border-4 border-yellow-900 m-4 rounded-lg hidden">
+        <h1 class="text-4xl md:text-6xl font-bold text-yellow-600 mb-2 tracking-widest">BİTMEDİ...</h1>
+        <p class="text-yellow-800 mb-4 max-w-md">Onları öldürdün sanıyorsun ama sadece yer değiştirdiler. Buradan çıkış yok.</p>
+        <button onclick="location.reload()" class="px-8 py-3 bg-yellow-900 hover:bg-yellow-800 text-black font-bold text-lg rounded shadow-lg border-2 border-yellow-700 transition-all">
+            DAHA DERİNE İN
+        </button>
+    </div>
+
+    <script>
+        // Web Audio API - Korku Ses Tasarımı
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let ambientHumOsc = null;
+        let ambientHumGain = null;
+
+        function initAmbientHum() {
+            if (ambientHumOsc) return;
+            // Backrooms floresan uğultusu (Düşük frekanslı rahatsız edici ses)
+            ambientHumOsc = audioCtx.createOscillator();
+            ambientHumOsc.type = 'sawtooth';
+            ambientHumOsc.frequency.value = 55; // 50-60Hz arası elektrik vızıltısı
+            
+            ambientHumGain = audioCtx.createGain();
+            ambientHumGain.gain.value = 0.05;
+            
+            // Cızırtı filtresi
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 400;
+
+            ambientHumOsc.connect(filter);
+            filter.connect(ambientHumGain);
+            ambientHumGain.connect(audioCtx.destination);
+            ambientHumOsc.start();
+        }
+
+        // Procedural Audio Generation for Whisper "Can You Hear Me"
+        function playWhisper() {
+            const time = audioCtx.currentTime;
+
+            // Synthesis wrapper helper to make whispering noise-like syllable
+            const createSyllable = (delay, duration, pitch, noiseRatio, label) => {
+                setTimeout(() => {
+                    // Create noise source
+                    const bufferSize = audioCtx.sampleRate * duration;
+                    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) {
+                        data[i] = Math.random() * 2 - 1;
+                    }
+                    const noise = audioCtx.createBufferSource();
+                    noise.buffer = buffer;
+
+                    // Filter noise to sound breathy/whispery
+                    const filter = audioCtx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.setValueAtTime(pitch, audioCtx.currentTime);
+                    filter.Q.setValueAtTime(4, audioCtx.currentTime);
+
+                    // Tone oscillator to give it faint vowel presence
+                    const osc = audioCtx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(pitch / 8, audioCtx.currentTime);
+
+                    const oscGain = audioCtx.createGain();
+                    oscGain.gain.setValueAtTime(1 - noiseRatio, audioCtx.currentTime);
+
+                    const finalGain = audioCtx.createGain();
+                    finalGain.gain.setValueAtTime(0, audioCtx.currentTime);
+                    finalGain.gain.linearRampToValueAtTime(0.18, audioCtx.currentTime + 0.05);
+                    finalGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+                    // Connections
+                    noise.connect(filter);
+                    filter.connect(finalGain);
+
+                    osc.connect(oscGain);
+                    oscGain.connect(finalGain);
+
+                    finalGain.connect(audioCtx.destination);
+
+                    noise.start();
+                    osc.start();
+                    noise.stop(audioCtx.currentTime + duration);
+                    osc.stop(audioCtx.currentTime + duration);
+                }, delay * 1000);
+            };
+
+            // "can"
+            createSyllable(0.0, 0.25, 1200, 0.9, "can");
+            // "you"
+            createSyllable(0.35, 0.22, 800, 0.75, "you");
+            // "hear"
+            createSyllable(0.65, 0.28, 1400, 0.95, "hear");
+            // "me"
+            createSyllable(1.0, 0.35, 700, 0.8, "me");
+        }
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            if (type === 'shoot') {
+                const bufferSize = audioCtx.sampleRate * 0.2;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = audioCtx.createBufferSource();
+                noise.buffer = buffer;
+                const noiseFilter = audioCtx.createBiquadFilter();
+                noiseFilter.type = 'bandpass';
+                noiseFilter.frequency.value = 800;
+                
+                const noiseGain = audioCtx.createGain();
+                noiseGain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+                noiseGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(audioCtx.destination);
+                noise.start();
+            } else if (type === 'hit') {
+                // Oyuncu hasar alma sesi (Derin kalp atışı)
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(60, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.3);
+                gainNode.gain.setValueAtTime(0.8, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+            } else if (type === 'yell') {
+                // Telsiz/Bağırma yankısı
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(250, audioCtx.currentTime + 0.2);
+                gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.5);
+
+                // "ken yu hiyır mi" fısıltısı (Düşük, uğursuz, gürültülü)
+                setTimeout(() => {
+                    playWhisper();
+                }, 400);
+
+            } else if (type === 'monster_scream') {
+                // Varlık çığlığı (Korkunç, çok katmanlı, canavarca çığlık)
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(180, audioCtx.currentTime + 0.4);
+                osc.frequency.exponentialRampToValueAtTime(1000, audioCtx.currentTime + 1.2);
+                
+                // İkinci bir canavarca rezonans osilatörü
+                const subOsc = audioCtx.createOscillator();
+                const subGain = audioCtx.createGain();
+                subOsc.type = 'triangle';
+                subOsc.frequency.setValueAtTime(90, audioCtx.currentTime);
+                subOsc.frequency.linearRampToValueAtTime(45, audioCtx.currentTime + 1.5);
+                subGain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                subGain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+
+                gainNode.gain.setValueAtTime(0.6, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
+                
+                subOsc.connect(subGain);
+                subGain.connect(audioCtx.destination);
+                
+                osc.start();
+                subOsc.start();
+                osc.stop(audioCtx.currentTime + 1.5);
+                subOsc.stop(audioCtx.currentTime + 1.5);
+
+            } else if (type === 'jumpscare_screech') {
+                // Devasa analog parazit ve kulak tırmalayan canavar çığlığı kombinasyonu
+                const screamLength = 2.2;
+                
+                // 1. Tiz Testere Dalgası (Osilatör)
+                const s1 = audioCtx.createOscillator();
+                s1.type = 'sawtooth';
+                s1.frequency.setValueAtTime(150, audioCtx.currentTime);
+                s1.frequency.linearRampToValueAtTime(3000, audioCtx.currentTime + 0.4);
+                s1.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + screamLength);
+                
+                // 2. Tiz Kare Dalga (Kulak tırmalaması için metalik distorsiyon)
+                const s2 = audioCtx.createOscillator();
+                s2.type = 'square';
+                s2.frequency.setValueAtTime(120, audioCtx.currentTime);
+                s2.frequency.linearRampToValueAtTime(1800, audioCtx.currentTime + 0.3);
+                s2.frequency.linearRampToValueAtTime(50, audioCtx.currentTime + screamLength);
+
+                const screamGain = audioCtx.createGain();
+                screamGain.gain.setValueAtTime(1.0, audioCtx.currentTime);
+                screamGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + screamLength);
+
+                // 3. VHS Analog Beyaz Parazit Patlaması
+                const bufferSize = audioCtx.sampleRate * screamLength;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = audioCtx.createBufferSource();
+                noise.buffer = buffer;
+                
+                const noiseFilter = audioCtx.createBiquadFilter();
+                noiseFilter.type = 'lowpass';
+                noiseFilter.frequency.setValueAtTime(2000, audioCtx.currentTime);
+                noiseFilter.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + screamLength);
+
+                const noiseGain = audioCtx.createGain();
+                noiseGain.gain.setValueAtTime(0.8, audioCtx.currentTime);
+                noiseGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + screamLength);
+
+                // Bağlantılar
+                s1.connect(screamGain);
+                s2.connect(screamGain);
+                screamGain.connect(audioCtx.destination);
+
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(audioCtx.destination);
+
+                s1.start();
+                s2.start();
+                noise.start();
+                s1.stop(audioCtx.currentTime + screamLength);
+                s2.stop(audioCtx.currentTime + screamLength);
+                noise.stop(audioCtx.currentTime + screamLength);
+
+            } else if (type === 'reload' || type === 'empty') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'creak') {
+                // Rastgele ortam gıcırtısı
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(30 + Math.random() * 40, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(10, audioCtx.currentTime + 1.2);
+                gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.2);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 1.2);
+            }
+        }
+
+        // --- Oyun Durumu ---
+        let gameActive = false;
+        let survivedSeconds = 0;
+        let survivalTimer = null;
+        let encourageTimer = null;
+
+        // Oyuncu Değişkenleri
+        let health = 100;
+        const maxHealth = 100;
+        let lastHitTime = 0;
+        let ammo = 8;
+        const maxAmmo = 8;
+        let reserveAmmo = 48;
+        let isReloading = false;
+
+        // Hareket ve Kamera
+        const moveKeys = { w: false, a: false, s: false, d: false };
+        let playerVelocity = new THREE.Vector3();
+        let cameraPitch = 0;
+        let cameraYaw = 0;
+        const pointerSpeed = 0.002;
+
+        // Yerçekimi ve Zıplama Değişkenleri
+        let isJumping = false;
+        let playerVerticalVelocity = 0;
+        const gravity = -18;
+        const jumpForce = 6.2;
+        const playerHeight = 2.0;
+
+        // --- Doku Üreticileri (Backrooms Teması) ---
+        function createWallpaperTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            
+            // Hastalıklı sarı arka plan
+            ctx.fillStyle = '#b59b4c'; 
+            ctx.fillRect(0, 0, 128, 128);
+
+            // Duvar kağıdı deseni (kirli dikey çizgiler ve oklar)
+            ctx.fillStyle = '#9e853b';
+            for(let i=0; i<128; i+=16) {
+                ctx.fillRect(i, 0, 4, 128);
+            }
+            
+            // Küf ve kir lekeleri
+            for (let i = 0; i < 3000; i++) {
+                const x = Math.floor(Math.random() * 128);
+                const y = Math.floor(Math.random() * 128);
+                ctx.fillStyle = Math.random() > 0.5 ? 'rgba(50, 40, 0, 0.2)' : 'rgba(0,0,0,0.1)';
+                ctx.fillRect(x, y, 2, 2);
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.minFilter = THREE.NearestFilter;
+            texture.magFilter = THREE.NearestFilter;
+            return texture;
+        }
+
+        function createCarpetTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            
+            // Islak, kirli halı rengi
+            ctx.fillStyle = '#7a6f44';
+            ctx.fillRect(0, 0, 128, 128);
+
+            // Halı dokusu gürültüsü
+            for (let i = 0; i < 8000; i++) {
+                const x = Math.floor(Math.random() * 128);
+                const y = Math.floor(Math.random() * 128);
+                const val = Math.random() * 40;
+                ctx.fillStyle = `rgb(${100+val}, ${90+val}, ${50+val})`;
+                ctx.fillRect(x, y, 2, 2);
+            }
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.minFilter = THREE.NearestFilter;
+            texture.magFilter = THREE.NearestFilter;
+            return texture;
+        }
+
+        function createCeilingTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            
+            // Tavan fayansları
+            ctx.fillStyle = '#dcd8c0';
+            ctx.fillRect(0, 0, 64, 64);
+            
+            // Fayans aralıkları
+            ctx.fillStyle = '#8c8876';
+            ctx.fillRect(0, 60, 64, 4);
+            ctx.fillRect(60, 0, 4, 64);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.minFilter = THREE.NearestFilter;
+            texture.magFilter = THREE.NearestFilter;
+            return texture;
+        }
+
+        // --- Three.js Kurulumu ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a180f);
+        scene.fog = new THREE.FogExp2(0x3a351f, 0.05);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+        const renderer = new THREE.WebGLRenderer({ antialias: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.BasicShadowMap;
+        container.appendChild(renderer.domElement);
+
+        // --- Materyaller ---
+        const carpetTex = createCarpetTexture();
+        carpetTex.repeat.set(30, 30);
+        const floorMat = new THREE.MeshLambertMaterial({ map: carpetTex });
+
+        const wallpaperTex = createWallpaperTexture();
+        const wallMat = new THREE.MeshLambertMaterial({ map: wallpaperTex });
+
+        const ceilingTex = createCeilingTexture();
+        ceilingTex.repeat.set(30, 30);
+        const ceilingMat = new THREE.MeshLambertMaterial({ map: ceilingTex });
+
+        // --- Labirent Çevresi ---
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(150, 150), floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(150, 150), ceilingMat);
+        ceiling.rotation.x = Math.PI / 2;
+        ceiling.position.y = 5; // Tavan yüksekliği
+        scene.add(ceiling);
+
+        // Basit Backrooms Labirenti Oluşturma
+        const obstacleMeshes = [];
+        const mapGrid = [
+            "WWWWWWWWWWWWWWWWWWWW",
+            "W...W.......W......W",
+            "W.W.W.WWWWW.W.WWWW.W",
+            "W.W.......W.W....W.W",
+            "W.WWWWWWW.W.WWWW.W.W",
+            "W.......W.W....W...W",
+            "W.WWWWW.W.WWWW.WWW.W",
+            "W.W.....W......W...W",
+            "W.W.WWWWWW.WWWWW.W.W",
+            "W.W..............W.W",
+            "W.WWWWWWWWWWWWWWWW.W",
+            "W..................W",
+            "WWWWWWWWWWWWWWWWWWWW"
+        ];
+        
+        const tileSize = 5;
+        const offsetX = - (mapGrid[0].length * tileSize) / 2;
+        const offsetZ = - (mapGrid.length * tileSize) / 2;
+        const wallHeight = 5;
+
+        // Labirenti Çiz
+        for (let z = 0; z < mapGrid.length; z++) {
+            for (let x = 0; x < mapGrid[z].length; x++) {
+                if (mapGrid[z][x] === 'W') {
+                    const geo = new THREE.BoxGeometry(tileSize, wallHeight, tileSize);
+                    const clonedMat = wallMat.clone();
+                    clonedMat.map = wallpaperTex.clone();
+                    clonedMat.map.needsUpdate = true;
+                    clonedMat.map.repeat.set(1, 1);
+                    
+                    const mesh = new THREE.Mesh(geo, clonedMat);
+                    mesh.position.set(offsetX + x * tileSize + tileSize/2, wallHeight/2, offsetZ + z * tileSize + tileSize/2);
+                    mesh.castShadow = true;
+                    mesh.receiveShadow = true;
+                    scene.add(mesh);
+                    obstacleMeshes.push(mesh);
+                }
+            }
+        }
+
+        // --- Işıklandırma ---
+        const ambientLight = new THREE.AmbientLight(0x202015);
+        scene.add(ambientLight);
+
+        // Oyuncunun El Feneri
+        const flashLight = new THREE.SpotLight(0xffffee, 1.5, 35, Math.PI/5, 0.5, 1);
+        flashLight.castShadow = true;
+        flashLight.shadow.mapSize.width = 512;
+        flashLight.shadow.mapSize.height = 512;
+        flashLight.position.set(0, 0, 0);
+        
+        const flashLightTarget = new THREE.Object3D();
+        flashLightTarget.position.set(0, 0, -1);
+        flashLight.target = flashLightTarget;
+        
+        camera.add(flashLight);
+        camera.add(flashLightTarget);
+
+        // Tavanda titreyen floresan ışıklar
+        const flickeringLights = [];
+        for(let i=0; i<10; i++) {
+            const fLight = new THREE.PointLight(0xffffcc, 0.5, 20);
+            fLight.position.set(
+                (Math.random() - 0.5) * 80,
+                4.8,
+                (Math.random() - 0.5) * 80
+            );
+            scene.add(fLight);
+            flickeringLights.push(fLight);
+        }
+
+        // --- Silah (COPP-9) ---
+        const gunGroup = new THREE.Group();
+        const gunMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+        
+        const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.5), gunMat);
+        barrel.position.set(0, 0, -0.2);
+        gunGroup.add(barrel);
+        
+        const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.25, 0.1), gunMat);
+        grip.rotation.x = 0.2;
+        grip.position.set(0, -0.15, 0);
+        gunGroup.add(grip);
+
+        gunGroup.position.set(0.25, -0.3, -0.5);
+        camera.add(gunGroup);
+        scene.add(camera);
+
+        const muzzleFlashLight = new THREE.PointLight(0xffddaa, 0, 5);
+        muzzleFlashLight.position.set(0.25, -0.3, -0.8);
+        camera.add(muzzleFlashLight);
+
+        // --- Düşmanlar (Varlıklar) ---
+        const entities = [];
+
+        class Entity {
+            constructor(x, z) {
+                this.group = new THREE.Group();
+                this.group.position.set(x, 0, z);
+
+                const entityMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
+                
+                // Gövde
+                this.body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.1, 1.8, 8), entityMat);
+                this.body.position.y = 1.0;
+                this.group.add(this.body);
+
+                // Kafa (Çarpık ve boynu bükük)
+                this.head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 8), entityMat);
+                this.head.position.set(0.1, 2.0, 0.1); 
+                this.group.add(this.head);
+
+                // Kollar (Öne doğru uzanmış, uzun)
+                this.arm1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 1.2), entityMat);
+                this.arm1.position.set(0.35, 1.4, -0.4);
+                this.group.add(this.arm1);
+                
+                this.arm2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 1.2), entityMat);
+                this.arm2.position.set(-0.35, 1.4, -0.4);
+                this.group.add(this.arm2);
+
+                scene.add(this.group);
+
+                this.state = 'LURK'; // LURK, CHASING, DEAD
+                this.health = 1; // Canavarlar artık tek vuruşta ölsün
+                this.baseSpeed = 1.5 + Math.random() * 1.5;
+                this.speed = this.baseSpeed;
+                this.lastMeleeTime = 0;
+            }
+
+            takeDamage(amount) {
+                if (this.state === 'DEAD') return;
+                this.health -= amount;
+                
+                this.group.position.z += 0.2; 
+                
+                if (this.state === 'LURK') {
+                    this.enrage();
+                }
+
+                if (this.health <= 0) {
+                    this.die();
+                }
+            }
+
+            die() {
+                this.state = 'DEAD';
+                this.group.rotation.x = -Math.PI / 2;
+                this.group.position.y = 0.2;
+                
+                const twitch = setInterval(() => {
+                    this.head.rotation.z = Math.random() * 0.5;
+                }, 50);
+                setTimeout(() => clearInterval(twitch), 2000);
+            }
+
+            enrage() {
+                if (this.state === 'DEAD') return;
+                this.state = 'CHASING';
+                this.speed = this.baseSpeed * 2.8; // Öfkelenince çok hızlanır
+                playSound('monster_scream');
+            }
+
+            update(delta, playerPos) {
+                if (this.state === 'DEAD') return;
+
+                const distToPlayer = this.group.position.distanceTo(playerPos);
+
+                if (distToPlayer < 18 && this.state === 'LURK') {
+                    this.group.lookAt(playerPos.x, this.group.position.y, playerPos.z);
+                    if (distToPlayer < 10) this.enrage();
+                }
+
+                if (this.state === 'CHASING') {
+                    this.group.lookAt(playerPos.x, this.group.position.y, playerPos.z);
+                    this.group.translateOnAxis(new THREE.Vector3(0, 0, 1), this.speed * delta);
+                    
+                    this.arm1.rotation.x = Math.sin(performance.now() * 0.01) * 0.5;
+                    this.arm2.rotation.x = Math.cos(performance.now() * 0.01) * 0.5;
+
+                    // Melee Saldırısı
+                    if (distToPlayer < 2.5) {
+                        const now = performance.now();
+                        if (now - this.lastMeleeTime > 1000) {
+                            this.lastMeleeTime = now;
+                            playerGetHit(100); // Seni yakaladığında tek vuruşta öldürebilir veya jumpscare tetikler
+                        }
+                    }
+                }
+            }
+        }
+
+        function initEntities() {
+            entities.push(new Entity(0, -15));
+            entities.push(new Entity(-10, 15));
+            entities.push(new Entity(25, -20));
+            entities.push(new Entity(-25, -10));
+            entities.push(new Entity(10, 25));
+        }
+
+        // Oyuncu Başlangıç Konumu
+        camera.position.set(0, playerHeight, 15);
+
+        // --- Jumpscare & Yakalanma Mekaniği ---
+        function playerGetHit(amount) {
+            if (!gameActive) return;
+            health = Math.max(0, health - amount);
+            lastHitTime = performance.now();
+            
+            const vignette = document.getElementById('damage-vignette');
+            const intensity = (100 - health) / 100;
+            vignette.style.boxShadow = `inset 0 0 ${150 * intensity}px rgba(100, 80, 0, ${intensity + 0.2})`;
+
+            if (health <= 0) {
+                triggerJumpscare();
+            } else {
+                playSound('hit');
+            }
+        }
+
+        function triggerJumpscare() {
+            gameActive = false;
+            clearInterval(survivalTimer);
+            clearInterval(encourageTimer);
+            document.exitPointerLock();
+
+            // Ekrandaki Jumpscare Elemanlarını Aktifleştir
+            const overlay = document.getElementById('jumpscare-overlay');
+            const face = document.getElementById('scary-face');
+            
+            overlay.classList.add('jumpscare-active');
+            face.classList.add('face-active');
+
+            // Kulak tırmalayan jumpscare çığlığı çal
+            playSound('jumpscare_screech');
+
+            // Kamera şiddetle sarsılsın
+            let sarsinti = setInterval(() => {
+                camera.position.x += (Math.random() - 0.5) * 0.8;
+                camera.position.y += (Math.random() - 0.5) * 0.8;
+            }, 30);
+
+            // 1.8 Saniye sonra kayıp ekranını göster
+            setTimeout(() => {
+                clearInterval(sarsinti);
+                overlay.classList.remove('jumpscare-active');
+                face.classList.remove('face-active');
+                document.getElementById('game-over-screen').classList.remove('hidden');
+            }, 1800);
+        }
+
+        // F Tuşu Teşvik Sözleri
+        const encouragePrompts = [
+            "SESLEN... BELKİ DUYARLAR? [F]",
+            "BURADASIN... YARDIM İSTEMEK İÇİN [F]'YE BAS...",
+            "TELSİZDEN SES VER... SESİNE GELECEKLER [F]",
+            "KORKUYORSUN... ÇIĞLIK AT... [F]",
+            "ONLAR DA SENİ ARIYOR... [F] İLE SESLEN..."
+        ];
+
+        function startIncentivePrompts() {
+            encourageTimer = setInterval(() => {
+                if(!gameActive) return;
+                const prompt = document.getElementById('interaction-prompt');
+                const randomText = encouragePrompts[Math.floor(Math.random() * encouragePrompts.length)];
+                
+                prompt.innerText = randomText;
+                prompt.classList.remove('hidden');
+
+                // Ortam sesini destekle
+                if(Math.random() > 0.4) {
+                    playSound('creak');
+                }
+
+                setTimeout(() => {
+                    prompt.classList.add('hidden');
+                }, 4000);
+
+            }, 12000); // Her 12 saniyede bir oyuncuyu kışkırt
+        }
+
+        // Korku Oyunlarında Can Yavaş Yenilenir
+        setInterval(() => {
+            if (!gameActive) return;
+            const now = performance.now();
+            if (now - lastHitTime > 5000 && health < maxHealth) {
+                health = Math.min(maxHealth, health + 5);
+                const vignette = document.getElementById('damage-vignette');
+                const intensity = (100 - health) / 100;
+                vignette.style.boxShadow = `inset 0 0 ${150 * intensity}px rgba(100, 80, 0, ${intensity})`;
+            }
+        }, 1000);
+
+        function checkVictoryCondition() {
+            const alive = entities.filter(e => e.state !== 'DEAD');
+            if (alive.length === 0) {
+                gameActive = false;
+                clearInterval(survivalTimer);
+                clearInterval(encourageTimer);
+                document.exitPointerLock();
+                document.getElementById('victory-screen').classList.remove('hidden');
+            }
+        }
+
+        const btnPlay = document.getElementById('btn-play');
+        btnPlay.addEventListener('click', () => {
+            document.body.requestPointerLock();
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            if (document.pointerLockElement === document.body) {
+                document.getElementById('start-screen').classList.add('hidden');
+                if (!gameActive) {
+                    gameActive = true;
+                    audioCtx.resume();
+                    initAmbientHum();
+                    startIncentivePrompts();
+                    
+                    survivalTimer = setInterval(() => {
+                        survivedSeconds++;
+                        document.getElementById('score-text').innerText = `Hayatta Kalma Süresi: ${survivedSeconds} saniye`;
+                    }, 1000);
+                }
+            } else {
+                if (health > 0 && entities.filter(e => e.state !== 'DEAD').length > 0) {
+                    document.getElementById('start-screen').classList.remove('hidden');
+                    gameActive = false;
+                    clearInterval(survivalTimer);
+                    clearInterval(encourageTimer);
+                }
+            }
+        });
+
+        // Mouse Bakışı
+        document.addEventListener('mousemove', (e) => {
+            if (!gameActive) return;
+            cameraYaw -= e.movementX * pointerSpeed;
+            cameraPitch -= e.movementY * pointerSpeed;
+            cameraPitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, cameraPitch));
+            camera.rotation.set(cameraPitch, cameraYaw, 0, 'YXZ');
+        });
+
+        // Klavye Kontrolleri
+        window.addEventListener('keydown', (e) => {
+            if (!gameActive) return;
+            const key = e.key.toLowerCase();
+            if (key === 'w' || key === 'arrowup') moveKeys.w = true;
+            if (key === 's' || key === 'arrowdown') moveKeys.s = true;
+            if (key === 'a' || key === 'arrowleft') moveKeys.a = true;
+            if (key === 'd' || key === 'arrowright') moveKeys.d = true;
+
+            // Zıplama Mekaniği [SPACE]
+            if (key === ' ' || key === 'spacebar') {
+                if (!isJumping) {
+                    isJumping = true;
+                    playerVerticalVelocity = jumpForce;
+                }
+            }
+
+            // Telsiz Bağırması [F] -> Canavarları kışkırtır & fısıltı çalar
+            if (key === 'f') {
+                performYellInteraction();
+            }
+
+            if (key === 'r') performReload();
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w' || key === 'arrowup') moveKeys.w = false;
+            if (key === 's' || key === 'arrowdown') moveKeys.s = false;
+            if (key === 'a' || key === 'arrowleft') moveKeys.a = false;
+            if (key === 'd' || key === 'arrowright') moveKeys.d = false;
+        });
+
+        // Ateş Etme
+        window.addEventListener('mousedown', (e) => {
+            if (!gameActive || e.button !== 0 || isReloading) return;
+
+            if (ammo <= 0) {
+                playSound('empty');
+                return;
+            }
+
+            ammo--;
+            document.getElementById('ammo-display').innerText = `${ammo} / ${reserveAmmo}`;
+            playSound('shoot');
+
+            // Geri tepme
+            gunGroup.position.z = -0.42;
+            gunGroup.position.y = -0.25;
+            setTimeout(() => {
+                gunGroup.position.z = -0.5;
+                gunGroup.position.y = -0.3;
+            }, 80);
+
+            // Muzzle flash
+            muzzleFlashLight.intensity = 2;
+            setTimeout(() => { muzzleFlashLight.intensity = 0; }, 50);
+
+            // Işın Gönderme (Vurma)
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+            const intersects = raycaster.intersectObjects(scene.children, true);
+            if (intersects.length > 0) {
+                const firstHit = intersects[0];
+                
+                for (let entity of entities) {
+                    if (entity.group.getObjectById(firstHit.object.id) || 
+                        firstHit.object === entity.body || 
+                        firstHit.object === entity.head) {
+                        entity.takeDamage(10); // Tek vuruşta öldür (Health zaten 1)
+                        checkVictoryCondition();
+                        break;
+                    }
+                }
+            }
+        });
+
+        function performYellInteraction() {
+            playSound('yell');
+            const prompt = document.getElementById('interaction-prompt');
+            prompt.innerText = "...KEN YU HİYIR Mİ?...";
+            prompt.classList.remove('hidden');
+            
+            // Etraftaki tüm canavarlar sese doğru koşar
+            entities.forEach(entity => {
+                if(entity.state === 'LURK') {
+                    setTimeout(() => entity.enrage(), 800);
+                }
+            });
+
+            setTimeout(() => {
+                prompt.classList.add('hidden');
+            }, 3000);
+        }
+
+        function performReload() {
+            if (isReloading || reserveAmmo <= 0 || ammo === maxAmmo) return;
+            isReloading = true;
+            document.getElementById('reload-prompt').innerText = "YENİLENİYOR...";
+            playSound('reload');
+
+            gunGroup.rotation.z = -0.5;
+            gunGroup.position.y = -0.4;
+
+            setTimeout(() => {
+                const needed = maxAmmo - ammo;
+                const toLoad = Math.min(needed, reserveAmmo);
+                ammo += toLoad;
+                reserveAmmo -= toLoad;
+                
+                gunGroup.rotation.z = 0;
+                gunGroup.position.y = -0.3;
+                isReloading = false;
+                document.getElementById('reload-prompt').innerText = "Yenilemek için [R]";
+                document.getElementById('ammo-display').innerText = `${ammo} / ${reserveAmmo}`;
+            }, 1200);
+        }
+
+        // Çarpışma Kontrolü
+        function checkCollisions(newPosition) {
+            for (let obstacle of obstacleMeshes) {
+                const box = new THREE.Box3().setFromObject(obstacle);
+                // Oyuncu yarıçapı ekle
+                box.min.x -= 0.6; box.max.x += 0.6;
+                box.min.z -= 0.6; box.max.z += 0.6;
+
+                if (box.containsPoint(newPosition)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(0.05, clock.getDelta());
+
+            // Floresan ışıkların titremesi
+            if(gameActive) {
+                flickeringLights.forEach(light => {
+                    if(Math.random() > 0.95) {
+                        light.intensity = Math.random() > 0.5 ? 0.8 : 0.1;
+                    }
+                });
+            }
+
+            if (gameActive) {
+                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                forward.y = 0; forward.normalize();
+
+                const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+                right.y = 0; right.normalize();
+
+                const moveDir = new THREE.Vector3();
+                if (moveKeys.w) moveDir.add(forward);
+                if (moveKeys.s) moveDir.sub(forward);
+                if (moveKeys.d) moveDir.add(right);
+                if (moveKeys.a) moveDir.sub(right);
+                moveDir.normalize();
+
+                const speed = 5.5;
+                const targetVel = moveDir.multiplyScalar(speed);
+                playerVelocity.lerp(targetVel, 10 * delta);
+
+                const nextPos = camera.position.clone().addScaledVector(playerVelocity, delta);
+                
+                // Yatay Çarpışma Testi
+                const tryX = camera.position.clone();
+                tryX.x = nextPos.x;
+                if (!checkCollisions(tryX)) camera.position.x = nextPos.x;
+
+                const tryZ = camera.position.clone();
+                tryZ.z = nextPos.z;
+                if (!checkCollisions(tryZ)) camera.position.z = nextPos.z;
+
+                // --- Zıplama & Yerçekimi Fiziği ---
+                if (isJumping) {
+                    playerVerticalVelocity += gravity * delta;
+                    camera.position.y += playerVerticalVelocity * delta;
+
+                    // Tavan Çarpışması (Head bonk)
+                    if (camera.position.y >= 4.5) { 
+                        camera.position.y = 4.5;
+                        playerVerticalVelocity = 0; // Hızı sıfırla, yere düşüş başlasın
+                    }
+
+                    // Yere İniş Kontrolü
+                    if (camera.position.y <= playerHeight) {
+                        camera.position.y = playerHeight;
+                        isJumping = false;
+                        playerVerticalVelocity = 0;
+                    }
+                }
+
+                entities.forEach(entity => {
+                    entity.update(delta, camera.position);
+                });
+            }
+
+            // Silah Salınımı ve Titremesi
+            if (gameActive) {
+                const isMoving = (moveKeys.w || moveKeys.s || moveKeys.a || moveKeys.d);
+                const bob = isMoving ? Math.sin(performance.now() * 0.01) * 0.015 : Math.sin(performance.now() * 0.005) * 0.005;
+                gunGroup.position.y = -0.3 + bob;
+                gunGroup.position.x = 0.25 + Math.cos(performance.now() * 0.003) * 0.005;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        initEntities();
+        window.onload = () => animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
